@@ -1,0 +1,15 @@
+{
+    "minecraftVersion": {
+        "_comment1": "major: 1.8-1.19",
+        "major": "1.19",
+
+        "_comment2": "Leave blank for no minor version",
+        "minor": "2"
+    },
+    
+    "_comment1": "Name of file to download new builds to for verification",
+    "tempFile": "paper.jar.tmp",
+
+    "_comment2": "Name of file that runs server",
+    "serverFile": "paper.jar"
+}
