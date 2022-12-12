@@ -7,26 +7,6 @@ const fs = require("fs")
 const https = require("https")
 const crypto = require("crypto")
 
-function httpsGet(url, text, onEnd) {
-    console.info("HTTPS GET > URL: " + url)
-
-    return https.get(url, res => {
-        var content = ""
-
-        if (text) res.on("data", chunk => content += chunk)
-
-        res.on("end", () => {
-            if (res.statusCode != 200) {
-                console.error("HTTPS error > Status Code: " + res.statusCode + ", Status Message: " + res.statusMessage)
-
-                return
-            }
-
-            onEnd(res, content)
-        })
-    }).on("error", err => console.error("HTTPS error: " + err))
-}
-
 console.info("Loading config...")
 
 const config = JSON.parse(fs.readFileSync("paperclip_config.json").toString())
@@ -51,6 +31,12 @@ function httpsError(url, err) {
     console.error("HTTPS error > URL: " + url + ", Message: " + err)
 }
 
+var latestCompatBuildSha256
+
+function verifyBuildFile(filename) {
+    return fs.existsSync(filename) && crypto.createHash("sha256").update(fs.readFileSync(filename)).digest("hex") === latestCompatBuildSha256
+}
+
 var foTemp
 
 function closeTempFile(onEnd) {
@@ -73,6 +59,10 @@ function deleteTempFile(onEnd) {
 
         onEnd()
     })
+}
+
+function finishSuccessfully() {
+    deleteTempFile(() => console.info("Paperclip finished successfully (" + ((Date.now() - startTime) / 1000) + "s)"))
 }
 
 https.get(buildsUrl, res => {
@@ -120,6 +110,17 @@ https.get(buildsUrl, res => {
         latestCompatBuild.changes.forEach((change, index) => changes += change.summary + (index == latestCompatBuild.changes.length - 1 ? "" : ", "));
 
         console.info("Changes: " + changes)
+
+        latestCompatBuildSha256 = latestCompatBuild.downloads.application.sha256
+
+        if (verifyBuildFile(config.serverFile)) {
+            console.info("Latest compatible build already installed")
+
+            finishSuccessfully()
+
+            return
+        }
+
         console.info("Downloading latest compatible build...")
 
         foTemp = fs.createWriteStream(config.tempFile)
@@ -138,7 +139,7 @@ https.get(buildsUrl, res => {
             foTemp.on("finish", () => closeTempFile(() => {
                 console.info("Verifying downloaded latest build with SHA256...")
 
-                if (crypto.createHash("sha256").update(fs.readFileSync(config.tempFile)).digest("hex") !== latestCompatBuild.downloads.application.sha256) {
+                if (!verifyBuildFile(config.tempFile)) {
                     console.error("Verification unsuccessful")
 
                     return
@@ -148,7 +149,7 @@ https.get(buildsUrl, res => {
 
                 fs.copyFileSync(config.tempFile, config.serverFile)
 
-                deleteTempFile(() => console.info("Paperclip finished successfully (" + ((Date.now() - startTime) / 1000) + "s)"))
+                finishSuccessfully()
             }))
         }).on("error", err => httpsError(downloadUrl, err))
     })
